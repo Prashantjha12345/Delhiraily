@@ -1,5 +1,5 @@
 import { useState, useRef } from 'react';
-import { Camera, UserPlus, Trash2, Check, MapPin } from 'lucide-react';
+import { Camera, Trash2, Check, MapPin } from 'lucide-react';
 import { assemblies } from '../data/assemblies';
 import { supabase } from '../lib/supabase';
 import { submitViaProxy, compressImageToDataUrl } from '../lib/api';
@@ -93,10 +93,8 @@ export default function UserForm() {
   const [totalPeople, setTotalPeople] = useState('');
   const [vehicleNumber, setVehicleNumber] = useState('');
   const [people, setPeople] = useState<Person[]>([]);
-  const [personName, setPersonName] = useState('');
-  const [personMobile, setPersonMobile] = useState('');
-  const [personImage, setPersonImage] = useState<File | null>(null);
-  const [personImagePreview, setPersonImagePreview] = useState('');
+  const [assemblySearch, setAssemblySearch] = useState('');
+  const [assemblyDropdownOpen, setAssemblyDropdownOpen] = useState(false);
   const [vehicleImage, setVehicleImage] = useState<File | null>(null);
   const [vehicleImagePreview, setVehicleImagePreview] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -107,21 +105,6 @@ export default function UserForm() {
   const vehicleInputRef = useRef<HTMLInputElement>(null);
   const personImageInputRef = useRef<HTMLInputElement>(null);
 
-  const addPerson = () => {
-    if (personName.trim() && personMobile.trim()) {
-      setPeople([...people, {
-        name: personName,
-        mobile: personMobile,
-        image: personImage || undefined,
-        imagePreview: personImagePreview || ''
-      }]);
-      setPersonName('');
-      setPersonMobile('');
-      setPersonImage(null);
-      setPersonImagePreview('');
-    }
-  };
-
   const removePerson = (index: number) => {
     setPeople(people.filter((_, i) => i !== index));
   };
@@ -129,10 +112,19 @@ export default function UserForm() {
   const handlePersonImage = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      setPersonImage(file);
-      setPersonImagePreview(URL.createObjectURL(file));
+      setPeople([...people, {
+        name: `Person ${people.length + 1}`,
+        mobile: '—',
+        image: file,
+        imagePreview: URL.createObjectURL(file)
+      }]);
+      e.target.value = '';
     }
   };
+
+  const filteredAssemblies = assemblySearch.trim()
+    ? assemblies.filter((a) => a.toLowerCase().includes(assemblySearch.toLowerCase()))
+    : assemblies;
 
   const handleVehicleImage = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -266,13 +258,12 @@ export default function UserForm() {
         setName('');
         setMobile('');
         setAssembly('');
+        setAssemblySearch('');
         setTotalPeople('');
         setVehicleNumber('');
         setPeople([]);
         setVehicleImage(null);
         setVehicleImagePreview('');
-        setPersonImage(null);
-        setPersonImagePreview('');
         setLocation(null);
         setLocationError(null);
       }, 2000);
@@ -313,7 +304,7 @@ export default function UserForm() {
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-50 py-6 px-4">
       <div className="max-w-2xl mx-auto">
         <div className="bg-white rounded-lg shadow-lg p-6">
-          <h1 className="text-2xl font-bold text-gray-800 mb-6 text-center">Visitor Entry Form</h1>
+          <h1 className="text-2xl font-bold text-gray-800 mb-6 text-center">Car Entry To Delhi 1 Match Rally</h1>
 
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
@@ -340,19 +331,48 @@ export default function UserForm() {
               />
             </div>
 
-            <div>
+            <div className="relative">
               <label className="block text-sm font-medium text-gray-700 mb-1">Assembly Name</label>
-              <select
+              <input
+                type="text"
                 required
-                value={assembly}
-                onChange={(e) => setAssembly(e.target.value)}
+                value={assemblyDropdownOpen ? assemblySearch : assembly}
+                onChange={(e) => {
+                  setAssemblySearch(e.target.value);
+                  setAssemblyDropdownOpen(true);
+                  if (!e.target.value) setAssembly('');
+                }}
+                onFocus={() => {
+                  setAssemblySearch(assembly || assemblySearch);
+                  setAssemblyDropdownOpen(true);
+                }}
+                onBlur={() => setTimeout(() => setAssemblyDropdownOpen(false), 200)}
+                placeholder="Search and select assembly"
                 className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              >
-                <option value="">Select Assembly</option>
-                {assemblies.map((a) => (
-                  <option key={a} value={a}>{a}</option>
-                ))}
-              </select>
+              />
+              {assemblyDropdownOpen && (
+                <div className="absolute z-10 mt-1 w-full bg-white border border-gray-300 rounded-lg shadow-lg max-h-48 overflow-auto">
+                  {filteredAssemblies.length === 0 ? (
+                    <div className="px-4 py-3 text-gray-500 text-sm">No assembly found</div>
+                  ) : (
+                    filteredAssemblies.map((a) => (
+                      <button
+                        key={a}
+                        type="button"
+                        onMouseDown={(e) => e.preventDefault()}
+                        onClick={() => {
+                          setAssembly(a);
+                          setAssemblySearch(a);
+                          setAssemblyDropdownOpen(false);
+                        }}
+                        className="w-full text-left px-4 py-2 hover:bg-gray-100 first:rounded-t-lg last:rounded-b-lg"
+                      >
+                        {a}
+                      </button>
+                    ))
+                  )}
+                </div>
+              )}
             </div>
 
             <div>
@@ -427,52 +447,23 @@ export default function UserForm() {
             </div>
 
             <div className="border-t pt-4">
-              <label className="block text-sm font-medium text-gray-700 mb-2">Add People (Name, Mobile, Photo)</label>
-              <div className="space-y-2">
-                <input
-                  type="text"
-                  value={personName}
-                  onChange={(e) => setPersonName(e.target.value)}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  placeholder="Person name"
-                />
-                <input
-                  type="tel"
-                  value={personMobile}
-                  onChange={(e) => setPersonMobile(e.target.value)}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  placeholder="Person mobile number"
-                />
-                <input
-                  ref={personImageInputRef}
-                  type="file"
-                  accept="image/*"
-                  capture="user"
-                  onChange={handlePersonImage}
-                  className="hidden"
-                />
-                <button
-                  type="button"
-                  onClick={() => personImageInputRef.current?.click()}
-                  className="w-full px-4 py-2 bg-purple-500 text-white rounded-lg flex items-center justify-center gap-2 hover:bg-purple-600 transition-colors"
-                >
-                  <Camera className="w-5 h-5" />
-                  {personImagePreview ? 'Change Photo' : 'Capture Photo'}
-                </button>
-                {personImagePreview && (
-                  <div className="relative inline-block">
-                    <img src={personImagePreview} alt="Person" className="w-20 h-20 object-cover rounded-lg border" />
-                  </div>
-                )}
-                <button
-                  type="button"
-                  onClick={addPerson}
-                  className="w-full px-4 py-2 bg-green-500 text-white rounded-lg flex items-center justify-center gap-2 hover:bg-green-600 transition-colors"
-                >
-                  <UserPlus className="w-5 h-5" />
-                  Add Person
-                </button>
-              </div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Add People (Photo)</label>
+              <input
+                ref={personImageInputRef}
+                type="file"
+                accept="image/*"
+                capture="user"
+                onChange={handlePersonImage}
+                className="hidden"
+              />
+              <button
+                type="button"
+                onClick={() => personImageInputRef.current?.click()}
+                className="w-full px-4 py-2 bg-purple-500 text-white rounded-lg flex items-center justify-center gap-2 hover:bg-purple-600 transition-colors"
+              >
+                <Camera className="w-5 h-5" />
+                Capture Photo (add multiple)
+              </button>
 
               {people.length > 0 && (
                 <div className="mt-3 space-y-2">
