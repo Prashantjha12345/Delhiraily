@@ -70,8 +70,8 @@ exports.handler = async (event) => {
     if (people.length > 0) {
       const peopleRows = people.map((p) => ({
         submission_id: submission.id,
-        name: p.name,
-        mobile_number: p.mobile,
+        name: p.name || '',
+        mobile_number: p.mobile_number || p.mobile || '',
         image_url: p.imageDataUrl || null,
       }));
       const { error: peopleError } = await supabase.from('people').insert(peopleRows);
@@ -94,10 +94,12 @@ exports.handler = async (event) => {
   } catch (err) {
     console.error('Submit function error:', err);
     const msg = err?.message || err?.error_description || err?.error || (err && String(err)) || 'Submission failed';
+    const hint = err?.hint || err?.details || '';
+    const fullMsg = hint ? `${msg} (${hint})` : msg;
     return {
       statusCode: 500,
       headers: corsHeaders,
-      body: JSON.stringify({ error: msg }),
+      body: JSON.stringify({ error: fullMsg }),
     };
   }
 };
