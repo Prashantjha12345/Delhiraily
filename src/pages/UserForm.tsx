@@ -194,7 +194,7 @@ export default function UserForm() {
             people.map(async (p) => ({
               name: p.name,
               mobile: p.mobile,
-              imageDataUrl: p.image ? await compressImageToDataUrl(p.image) : undefined
+              imageDataUrl: p.image ? await compressImageToDataUrl(p.image, 520, 0.6, { forPerson: true }) : undefined
             }))
           );
           await submitViaProxy({
@@ -243,7 +243,7 @@ export default function UserForm() {
               submission_id: submission.id,
               name: p.name,
               mobile_number: p.mobile,
-              image_url: p.image ? await compressImageToDataUrl(p.image) : null
+              image_url: p.image ? await compressImageToDataUrl(p.image, 520, 0.6, { forPerson: true }) : null
             }))
           );
           const { error: peopleError } = await supabase.from('people').insert(peopleData);

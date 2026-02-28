@@ -71,35 +71,49 @@ export function fileToBase64(file: File): Promise<string> {
   });
 }
 
-const MAX_DATAURL_LENGTH = 280000; // ~210KB base64 to stay under limits
+const MAX_DATAURL_LENGTH = 280000;   // ~210KB vehicle
+const MAX_DATAURL_LENGTH_PERSON = 160000; // ~120KB per person - smaller so vehicle+persons fit in one request
 
-/** Compress image and return data URL - small size for DB, no bucket */
-export function compressImageToDataUrl(file: File, maxWidth = 520, quality = 0.6): Promise<string> {
+/** Compress image and return data URL. Use forPerson:true for person photos (smaller size). */
+export function compressImageToDataUrl(
+  file: File,
+  maxWidth = 520,
+  quality = 0.6,
+  options?: { forPerson?: boolean }
+): Promise<string> {
+  const isPerson = options?.forPerson === true;
+  const maxLen = isPerson ? MAX_DATAURL_LENGTH_PERSON : MAX_DATAURL_LENGTH;
+  const w = isPerson ? 360 : maxWidth;
+  const q = isPerson ? 0.5 : quality;
+
   return new Promise((resolve, reject) => {
     const img = new Image();
-    const tryQuality = (q: number, w: number) => {
+    const tryQuality = (qualityVal: number, width: number) => {
       const canvas = document.createElement('canvas');
-      let { width, height } = img;
-      if (width > w) {
-        height = (height * w) / width;
-        width = w;
+      let { width: tw, height: th } = img;
+      if (tw > width) {
+        th = (th * width) / tw;
+        tw = width;
       }
-      canvas.width = width;
-      canvas.height = height;
+      canvas.width = tw;
+      canvas.height = th;
       const ctx = canvas.getContext('2d');
       if (!ctx) {
         reject(new Error('Canvas not supported'));
         return;
       }
-      ctx.drawImage(img, 0, 0, width, height);
+      ctx.drawImage(img, 0, 0, tw, th);
       canvas.toBlob(
         (blob) => {
-          if (!blob) return;
+          if (!blob) {
+            reject(new Error('Image compress failed'));
+            return;
+          }
           const reader = new FileReader();
           reader.onload = () => {
             const dataUrl = reader.result as string;
-            if (dataUrl.length > MAX_DATAURL_LENGTH && q > 0.35) {
-              tryQuality(q - 0.15, Math.floor(w * 0.85));
+            if (dataUrl.length > maxLen && qualityVal > 0.35) {
+              tryQuality(qualityVal - 0.15, Math.floor(width * 0.85));
             } else {
               resolve(dataUrl);
             }
@@ -108,12 +122,12 @@ export function compressImageToDataUrl(file: File, maxWidth = 520, quality = 0.6
           reader.readAsDataURL(blob);
         },
         'image/jpeg',
-        q
+        qualityVal
       );
     };
     img.onload = () => {
       URL.revokeObjectURL(img.src);
-      tryQuality(quality, maxWidth);
+      tryQuality(q, w);
     };
     img.onerror = () => {
       URL.revokeObjectURL(img.src);
