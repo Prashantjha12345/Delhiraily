@@ -282,7 +282,13 @@ export default function UserForm() {
     } catch (error) {
       console.error('Error submitting form:', error);
       setLocationError(null);
-      alert('Error submitting form. Please try again.');
+      const msg = error instanceof Error ? error.message : 'Unknown error';
+      const isNetwork = msg.includes('fetch') || msg.includes('Failed to fetch') || msg.includes('NetworkError');
+      alert(
+        isNetwork
+          ? 'Network error. Try WiFi or different network. (Jio par proxy deploy check karein - JIO-DEPLOY.md)'
+          : `Error: ${msg.slice(0, 80)}`
+      );
     } finally {
       setIsSubmitting(false);
     }
