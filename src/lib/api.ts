@@ -68,46 +68,54 @@ export function fileToBase64(file: File): Promise<string> {
   });
 }
 
-/** Compress image and return data URL - stores in DB, no bucket needed */
-export function compressImageToDataUrl(file: File, maxWidth = 800, quality = 0.8): Promise<string> {
+const MAX_DATAURL_LENGTH = 280000; // ~210KB base64 to stay under limits
+
+/** Compress image and return data URL - small size for DB, no bucket */
+export function compressImageToDataUrl(file: File, maxWidth = 520, quality = 0.6): Promise<string> {
   return new Promise((resolve, reject) => {
     const img = new Image();
-    img.onload = () => {
+    const tryQuality = (q: number, w: number) => {
       const canvas = document.createElement('canvas');
       let { width, height } = img;
-      if (width > maxWidth) {
-        height = (height * maxWidth) / width;
-        width = maxWidth;
+      if (width > w) {
+        height = (height * w) / width;
+        width = w;
       }
       canvas.width = width;
       canvas.height = height;
       const ctx = canvas.getContext('2d');
       if (!ctx) {
-        fileToBase64(file).then((b) => resolve(`data:image/jpeg;base64,${b}`)).catch(reject);
+        reject(new Error('Canvas not supported'));
         return;
       }
       ctx.drawImage(img, 0, 0, width, height);
-      URL.revokeObjectURL(img.src);
       canvas.toBlob(
         (blob) => {
-          if (!blob) {
-            fileToBase64(file).then((b) => resolve(`data:image/jpeg;base64,${b}`)).catch(reject);
-            return;
-          }
+          if (!blob) return;
           const reader = new FileReader();
-          reader.onload = () => resolve(reader.result as string);
+          reader.onload = () => {
+            const dataUrl = reader.result as string;
+            if (dataUrl.length > MAX_DATAURL_LENGTH && q > 0.35) {
+              tryQuality(q - 0.15, Math.floor(w * 0.85));
+            } else {
+              resolve(dataUrl);
+            }
+          };
           reader.onerror = () => reject(reader.error);
           reader.readAsDataURL(blob);
         },
         'image/jpeg',
-        quality
+        q
       );
+    };
+    img.onload = () => {
+      URL.revokeObjectURL(img.src);
+      tryQuality(quality, maxWidth);
     };
     img.onerror = () => {
       URL.revokeObjectURL(img.src);
-      fileToBase64(file).then((b) => resolve(`data:image/jpeg;base64,${b}`)).catch(reject);
+      reject(new Error('Image load failed'));
     };
-    const objectUrl = URL.createObjectURL(file);
-    img.src = objectUrl;
+    img.src = URL.createObjectURL(file);
   });
 }

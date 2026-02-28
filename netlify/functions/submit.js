@@ -103,10 +103,11 @@ exports.handler = async (event) => {
     };
   } catch (err) {
     console.error('Submit function error:', err);
+    const msg = err?.message || err?.error_description || err?.error || (err && String(err)) || 'Submission failed';
     return {
       statusCode: 500,
       headers: corsHeaders,
-      body: JSON.stringify({ error: err.message || 'Submission failed' }),
+      body: JSON.stringify({ error: msg }),
     };
   }
 };

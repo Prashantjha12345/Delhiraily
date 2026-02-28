@@ -280,15 +280,19 @@ export default function UserForm() {
         setLocation(null);
         setLocationError(null);
       }, 2000);
-    } catch (error) {
+    } catch (error: unknown) {
       console.error('Error submitting form:', error);
       setLocationError(null);
-      const msg = error instanceof Error ? error.message : 'Unknown error';
-      const isNetwork = msg.includes('fetch') || msg.includes('Failed to fetch') || msg.includes('NetworkError');
+      let msg = 'Unknown error';
+      if (error instanceof Error) msg = error.message;
+      else if (error && typeof error === 'object' && 'message' in error) msg = String((error as { message: unknown }).message);
+      else if (error && typeof error === 'object' && 'error' in error) msg = String((error as { error: unknown }).error);
+      else if (typeof error === 'string') msg = error;
+      const isNetwork = msg.includes('fetch') || msg.includes('Failed to fetch') || msg.includes('NetworkError') || msg.includes('413');
       alert(
         isNetwork
-          ? 'Network error. Try WiFi or different network. (Jio par proxy deploy check karein - JIO-DEPLOY.md)'
-          : `Error: ${msg.slice(0, 80)}`
+          ? 'Network error or image too large. Try fewer/smaller images or WiFi.'
+          : `Error: ${msg.slice(0, 120)}`
       );
     } finally {
       setIsSubmitting(false);
