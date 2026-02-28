@@ -36,7 +36,6 @@ exports.handler = async (event) => {
       longitude,
       people = [],
       vehicleImageDataUrl,
-      personImages = [],
     } = body;
 
     if (!name || !mobile_number || !assembly_name || total_people == null || !vehicle_number) {
@@ -73,6 +72,7 @@ exports.handler = async (event) => {
         submission_id: submission.id,
         name: p.name,
         mobile_number: p.mobile,
+        image_url: p.imageDataUrl || null,
       }));
       const { error: peopleError } = await supabase.from('people').insert(peopleRows);
       if (peopleError) throw peopleError;
@@ -84,16 +84,6 @@ exports.handler = async (event) => {
         image_type: 'vehicle',
         image_url: vehicleImageDataUrl,
       });
-    }
-
-    for (const img of personImages) {
-      if (img.dataUrl) {
-        await supabase.from('images').insert({
-          submission_id: submission.id,
-          image_type: 'person',
-          image_url: img.dataUrl,
-        });
-      }
     }
 
     return {

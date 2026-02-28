@@ -7,6 +7,8 @@ import { submitViaProxy, compressImageToDataUrl } from '../lib/api';
 interface Person {
   name: string;
   mobile: string;
+  image?: File | null;
+  imagePreview?: string;
 }
 
 interface LocationInfo {
@@ -93,28 +95,43 @@ export default function UserForm() {
   const [people, setPeople] = useState<Person[]>([]);
   const [personName, setPersonName] = useState('');
   const [personMobile, setPersonMobile] = useState('');
+  const [personImage, setPersonImage] = useState<File | null>(null);
+  const [personImagePreview, setPersonImagePreview] = useState('');
   const [vehicleImage, setVehicleImage] = useState<File | null>(null);
   const [vehicleImagePreview, setVehicleImagePreview] = useState('');
-  const [personImages, setPersonImages] = useState<File[]>([]);
-  const [personImagePreviews, setPersonImagePreviews] = useState<string[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
   const [location, setLocation] = useState<LocationInfo | null>(null);
   const [locationError, setLocationError] = useState<string | null>(null);
 
   const vehicleInputRef = useRef<HTMLInputElement>(null);
-  const personInputRef = useRef<HTMLInputElement>(null);
+  const personImageInputRef = useRef<HTMLInputElement>(null);
 
   const addPerson = () => {
     if (personName.trim() && personMobile.trim()) {
-      setPeople([...people, { name: personName, mobile: personMobile }]);
+      setPeople([...people, {
+        name: personName,
+        mobile: personMobile,
+        image: personImage || undefined,
+        imagePreview: personImagePreview || ''
+      }]);
       setPersonName('');
       setPersonMobile('');
+      setPersonImage(null);
+      setPersonImagePreview('');
     }
   };
 
   const removePerson = (index: number) => {
     setPeople(people.filter((_, i) => i !== index));
+  };
+
+  const handlePersonImage = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      setPersonImage(file);
+      setPersonImagePreview(URL.createObjectURL(file));
+    }
   };
 
   const handleVehicleImage = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -123,22 +140,6 @@ export default function UserForm() {
       setVehicleImage(file);
       setVehicleImagePreview(URL.createObjectURL(file));
     }
-  };
-
-  const handlePersonImages = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = Array.from(e.target.files || []);
-    if (files.length > 0) {
-      setPersonImages([...personImages, ...files]);
-      setPersonImagePreviews([
-        ...personImagePreviews,
-        ...files.map(f => URL.createObjectURL(f))
-      ]);
-    }
-  };
-
-  const removePersonImage = (index: number) => {
-    setPersonImages(personImages.filter((_, i) => i !== index));
-    setPersonImagePreviews(personImagePreviews.filter((_, i) => i !== index));
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -189,8 +190,12 @@ export default function UserForm() {
       if (isProd) {
         try {
           const vehicleImageDataUrl = vehicleImage ? await compressImageToDataUrl(vehicleImage) : undefined;
-          const personImagesData = await Promise.all(
-            personImages.map(async (f) => ({ dataUrl: await compressImageToDataUrl(f) }))
+          const peopleWithImages = await Promise.all(
+            people.map(async (p) => ({
+              name: p.name,
+              mobile: p.mobile,
+              imageDataUrl: p.image ? await compressImageToDataUrl(p.image) : undefined
+            }))
           );
           await submitViaProxy({
             name,
@@ -203,9 +208,8 @@ export default function UserForm() {
             location_state: locationState,
             latitude,
             longitude,
-            people,
-            vehicleImageDataUrl,
-            personImages: personImagesData
+            people: peopleWithImages,
+            vehicleImageDataUrl
           });
           submitted = true;
         } catch (proxyErr) {
@@ -234,11 +238,14 @@ export default function UserForm() {
         if (submissionError) throw submissionError;
 
         if (people.length > 0) {
-          const peopleData = people.map(p => ({
-            submission_id: submission.id,
-            name: p.name,
-            mobile_number: p.mobile
-          }));
+          const peopleData = await Promise.all(
+            people.map(async (p) => ({
+              submission_id: submission.id,
+              name: p.name,
+              mobile_number: p.mobile,
+              image_url: p.image ? await compressImageToDataUrl(p.image) : null
+            }))
+          );
           const { error: peopleError } = await supabase.from('people').insert(peopleData);
           if (peopleError) throw peopleError;
         }
@@ -250,17 +257,6 @@ export default function UserForm() {
             image_type: 'vehicle',
             image_url: vehicleDataUrl
           });
-        }
-
-        if (personImages.length > 0) {
-          for (const img of personImages) {
-            const personDataUrl = await compressImageToDataUrl(img);
-            await supabase.from('images').insert({
-              submission_id: submission.id,
-              image_type: 'person',
-              image_url: personDataUrl
-            });
-          }
         }
       }
 
@@ -275,8 +271,8 @@ export default function UserForm() {
         setPeople([]);
         setVehicleImage(null);
         setVehicleImagePreview('');
-        setPersonImages([]);
-        setPersonImagePreviews([]);
+        setPersonImage(null);
+        setPersonImagePreview('');
         setLocation(null);
         setLocationError(null);
       }, 2000);
@@ -431,7 +427,7 @@ export default function UserForm() {
             </div>
 
             <div className="border-t pt-4">
-              <label className="block text-sm font-medium text-gray-700 mb-2">Add People Details</label>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Add People (Name, Mobile, Photo)</label>
               <div className="space-y-2">
                 <input
                   type="text"
@@ -447,6 +443,27 @@ export default function UserForm() {
                   className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   placeholder="Person mobile number"
                 />
+                <input
+                  ref={personImageInputRef}
+                  type="file"
+                  accept="image/*"
+                  capture="user"
+                  onChange={handlePersonImage}
+                  className="hidden"
+                />
+                <button
+                  type="button"
+                  onClick={() => personImageInputRef.current?.click()}
+                  className="w-full px-4 py-2 bg-purple-500 text-white rounded-lg flex items-center justify-center gap-2 hover:bg-purple-600 transition-colors"
+                >
+                  <Camera className="w-5 h-5" />
+                  {personImagePreview ? 'Change Photo' : 'Capture Photo'}
+                </button>
+                {personImagePreview && (
+                  <div className="relative inline-block">
+                    <img src={personImagePreview} alt="Person" className="w-20 h-20 object-cover rounded-lg border" />
+                  </div>
+                )}
                 <button
                   type="button"
                   onClick={addPerson}
@@ -460,54 +477,22 @@ export default function UserForm() {
               {people.length > 0 && (
                 <div className="mt-3 space-y-2">
                   {people.map((person, index) => (
-                    <div key={index} className="flex items-center justify-between bg-gray-50 p-3 rounded-lg">
-                      <div>
-                        <p className="font-medium text-gray-800">{person.name}</p>
+                    <div key={index} className="flex items-center gap-3 bg-gray-50 p-3 rounded-lg">
+                      {person.imagePreview ? (
+                        <img src={person.imagePreview} alt={person.name} className="w-12 h-12 object-cover rounded-full border" />
+                      ) : (
+                        <div className="w-12 h-12 rounded-full bg-gray-300 flex items-center justify-center text-gray-500 text-xs">No photo</div>
+                      )}
+                      <div className="flex-1 min-w-0">
+                        <p className="font-medium text-gray-800 truncate">{person.name}</p>
                         <p className="text-sm text-gray-600">{person.mobile}</p>
                       </div>
                       <button
                         type="button"
                         onClick={() => removePerson(index)}
-                        className="text-red-500 hover:text-red-700"
+                        className="text-red-500 hover:text-red-700 shrink-0"
                       >
                         <Trash2 className="w-5 h-5" />
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">People Images</label>
-              <input
-                ref={personInputRef}
-                type="file"
-                accept="image/*"
-                capture="environment"
-                multiple
-                onChange={handlePersonImages}
-                className="hidden"
-              />
-              <button
-                type="button"
-                onClick={() => personInputRef.current?.click()}
-                className="w-full px-4 py-3 bg-purple-500 text-white rounded-lg flex items-center justify-center gap-2 hover:bg-purple-600 transition-colors"
-              >
-                <Camera className="w-5 h-5" />
-                Capture People Images
-              </button>
-              {personImagePreviews.length > 0 && (
-                <div className="mt-3 grid grid-cols-2 gap-2">
-                  {personImagePreviews.map((preview, index) => (
-                    <div key={index} className="relative">
-                      <img src={preview} alt={`Person ${index + 1}`} className="w-full h-32 object-cover rounded-lg" />
-                      <button
-                        type="button"
-                        onClick={() => removePersonImage(index)}
-                        className="absolute top-1 right-1 bg-red-500 text-white p-1 rounded-full hover:bg-red-600"
-                      >
-                        <Trash2 className="w-4 h-4" />
                       </button>
                     </div>
                   ))}

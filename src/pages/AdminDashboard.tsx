@@ -7,6 +7,7 @@ interface Person {
   id: string;
   name: string;
   mobile_number: string;
+  image_url?: string | null;
 }
 
 interface Image {
@@ -180,9 +181,16 @@ export default function AdminDashboard() {
                         <h4 className="font-semibold text-gray-700 mb-2">People Details</h4>
                         <div className="space-y-2">
                           {submission.people.map((person) => (
-                            <div key={person.id} className="bg-white p-2 rounded border border-gray-200">
-                              <p className="font-medium text-sm">{person.name}</p>
-                              <p className="text-xs text-gray-600">{person.mobile_number}</p>
+                            <div key={person.id} className="flex items-center gap-3 bg-white p-2 rounded border border-gray-200">
+                              {person.image_url ? (
+                                <img src={person.image_url} alt={person.name} className="w-12 h-12 object-cover rounded-full border" />
+                              ) : (
+                                <div className="w-12 h-12 rounded-full bg-gray-200 flex items-center justify-center text-gray-500 text-xs">No photo</div>
+                              )}
+                              <div>
+                                <p className="font-medium text-sm">{person.name}</p>
+                                <p className="text-xs text-gray-600">{person.mobile_number}</p>
+                              </div>
                             </div>
                           ))}
                         </div>

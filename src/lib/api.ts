@@ -29,16 +29,19 @@ export async function submitViaProxy(payload: {
   location_state?: string | null;
   latitude?: number | null;
   longitude?: number | null;
-  people: Array<{ name: string; mobile: string }>;
+  people: Array<{ name: string; mobile: string; imageDataUrl?: string }>;
   vehicleImageDataUrl?: string;
-  personImages: Array<{ dataUrl: string }>;
 }): Promise<{ success: boolean; id: string }> {
   const res = await fetch(`${getBase()}/.netlify/functions/submit`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       ...payload,
-      people: payload.people.map((p) => ({ name: p.name, mobile_number: p.mobile })),
+      people: payload.people.map((p) => ({
+        name: p.name,
+        mobile_number: p.mobile,
+        imageDataUrl: p.imageDataUrl,
+      })),
     }),
   });
   const text = await res.text();
