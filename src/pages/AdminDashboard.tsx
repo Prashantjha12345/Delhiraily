@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Download, X, ChevronDown, ChevronUp } from 'lucide-react';
+import { Download, X, ChevronDown, ChevronUp, Users, FileText, Car } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { fetchSubmissionsViaProxy } from '../lib/api';
 
@@ -91,6 +91,15 @@ export default function AdminDashboard() {
 
   const downloadImage = async (url: string, filename: string) => {
     try {
+      if (url.startsWith('data:')) {
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = filename;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        return;
+      }
       const response = await fetch(url);
       const blob = await response.blob();
       const blobUrl = URL.createObjectURL(blob);
@@ -118,12 +127,80 @@ export default function AdminDashboard() {
     );
   }
 
+  const totalPeople = submissions.reduce((s, sub) => s + (sub.people?.length ?? 0), 0);
+  const assemblyWise = submissions.reduce<Record<string, { requests: number; people: number; vehicles: number }>>((acc, sub) => {
+    const a = sub.assembly_name || 'Other';
+    if (!acc[a]) acc[a] = { requests: 0, people: 0, vehicles: 0 };
+    acc[a].requests += 1;
+    acc[a].people += sub.people?.length ?? 0;
+    acc[a].vehicles += 1;
+    return acc;
+  }, {});
+  const assemblyList = Object.entries(assemblyWise).sort((a, b) => b[1].requests - a[1].requests);
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 py-6 px-4">
       <div className="max-w-6xl mx-auto">
         <div className="bg-white rounded-lg shadow-lg p-6 mb-6">
           <h1 className="text-3xl font-bold text-gray-800 text-center">Admin Dashboard</h1>
-          <p className="text-center text-gray-600 mt-2">Total Submissions: {submissions.length}</p>
+
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mt-6 mb-6">
+            <div className="bg-blue-50 rounded-lg p-4 border border-blue-100 flex items-center gap-3">
+              <div className="bg-blue-500 text-white p-3 rounded-lg">
+                <FileText className="w-6 h-6" />
+              </div>
+              <div>
+                <p className="text-2xl font-bold text-gray-800">{submissions.length}</p>
+                <p className="text-sm text-gray-600">Total Requests</p>
+              </div>
+            </div>
+            <div className="bg-green-50 rounded-lg p-4 border border-green-100 flex items-center gap-3">
+              <div className="bg-green-500 text-white p-3 rounded-lg">
+                <Users className="w-6 h-6" />
+              </div>
+              <div>
+                <p className="text-2xl font-bold text-gray-800">{totalPeople}</p>
+                <p className="text-sm text-gray-600">Total Persons</p>
+              </div>
+            </div>
+            <div className="bg-amber-50 rounded-lg p-4 border border-amber-100 flex items-center gap-3">
+              <div className="bg-amber-500 text-white p-3 rounded-lg">
+                <Car className="w-6 h-6" />
+              </div>
+              <div>
+                <p className="text-2xl font-bold text-gray-800">{submissions.length}</p>
+                <p className="text-sm text-gray-600">Total Vehicles</p>
+              </div>
+            </div>
+          </div>
+
+          {assemblyList.length > 0 && (
+            <div className="border-t pt-4">
+              <h3 className="font-semibold text-gray-700 mb-3">Assembly-wise Summary</h3>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b bg-gray-50">
+                      <th className="text-left py-2 px-3 font-medium text-gray-700">Assembly</th>
+                      <th className="text-right py-2 px-3 font-medium text-gray-700">Requests</th>
+                      <th className="text-right py-2 px-3 font-medium text-gray-700">Persons</th>
+                      <th className="text-right py-2 px-3 font-medium text-gray-700">Vehicles</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {assemblyList.map(([name, stats]) => (
+                      <tr key={name} className="border-b border-gray-100 hover:bg-gray-50">
+                        <td className="py-2 px-3 text-gray-800">{name}</td>
+                        <td className="py-2 px-3 text-right text-gray-600">{stats.requests}</td>
+                        <td className="py-2 px-3 text-right text-gray-600">{stats.people}</td>
+                        <td className="py-2 px-3 text-right text-gray-600">{stats.vehicles}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
         </div>
 
         <div className="space-y-4">
@@ -180,15 +257,34 @@ export default function AdminDashboard() {
                       <div>
                         <h4 className="font-semibold text-gray-700 mb-2">People Details</h4>
                         <div className="space-y-2">
-                          {submission.people.map((person) => (
+                          {submission.people.map((person, pIdx) => (
                             <div key={person.id} className="flex items-center gap-3 bg-white p-2 rounded border border-gray-200">
-                              {person.image_url ? (
-                                <img src={person.image_url} alt={person.name} className="w-12 h-12 object-cover rounded-full border" />
-                              ) : (
-                                <div className="w-12 h-12 rounded-full bg-gray-200 flex items-center justify-center text-gray-500 text-xs">No photo</div>
-                              )}
-                              <div>
-                                <p className="font-medium text-sm">{person.name}</p>
+                              <div className="relative group shrink-0">
+                                {person.image_url ? (
+                                  <>
+                                    <img
+                                      src={person.image_url}
+                                      alt={person.name}
+                                      className="w-12 h-12 object-cover rounded-full border cursor-pointer hover:opacity-90"
+                                      onClick={() => setSelectedImage(person.image_url!)}
+                                    />
+                                    <button
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        downloadImage(person.image_url!, `person_${person.name}_${submission.id}_${pIdx}.jpg`);
+                                      }}
+                                      className="absolute -bottom-1 -right-1 bg-blue-500 text-white p-1.5 rounded-full opacity-0 group-hover:opacity-100 hover:bg-blue-600 shadow"
+                                      title="Download"
+                                    >
+                                      <Download className="w-3.5 h-3.5" />
+                                    </button>
+                                  </>
+                                ) : (
+                                  <div className="w-12 h-12 rounded-full bg-gray-200 flex items-center justify-center text-gray-500 text-xs">No photo</div>
+                                )}
+                              </div>
+                              <div className="min-w-0 flex-1">
+                                <p className="font-medium text-sm truncate">{person.name}</p>
                                 <p className="text-xs text-gray-600">{person.mobile_number}</p>
                               </div>
                             </div>
