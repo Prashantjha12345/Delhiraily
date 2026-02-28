@@ -26,6 +26,8 @@ interface Submission {
   location_place_name?: string | null;
   location_city?: string | null;
   location_state?: string | null;
+  latitude?: number | null;
+  longitude?: number | null;
   people?: Person[];
   images?: Image[];
 }
@@ -159,12 +161,15 @@ export default function AdminDashboard() {
                         <p><span className="font-medium">Assembly:</span> {submission.assembly_name}</p>
                         <p><span className="font-medium">Total People:</span> {submission.total_people}</p>
                         <p><span className="font-medium">Vehicle Number:</span> {submission.vehicle_number}</p>
-                        {(submission.location_place_name || submission.location_city || submission.location_state) && (
+                        {(submission.location_place_name || submission.location_city || submission.location_state || submission.latitude != null || submission.longitude != null) && (
                           <div className="mt-2 pt-2 border-t border-gray-200">
                             <p className="font-medium text-gray-700 mb-1">Location (auto-detected)</p>
                             {submission.location_place_name && <p><span className="font-medium">Place:</span> {submission.location_place_name}</p>}
                             {submission.location_city && <p><span className="font-medium">City:</span> {submission.location_city}</p>}
                             {submission.location_state && <p><span className="font-medium">State:</span> {submission.location_state}</p>}
+                            {(submission.latitude != null || submission.longitude != null) && (
+                              <p><span className="font-medium">Coordinates:</span> {submission.latitude?.toFixed(6)}, {submission.longitude?.toFixed(6)}</p>
+                            )}
                           </div>
                         )}
                       </div>

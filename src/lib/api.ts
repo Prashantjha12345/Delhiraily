@@ -27,10 +27,11 @@ export async function submitViaProxy(payload: {
   location_place_name?: string | null;
   location_city?: string | null;
   location_state?: string | null;
+  latitude?: number | null;
+  longitude?: number | null;
   people: Array<{ name: string; mobile: string }>;
-  vehicleImageBase64?: string;
-  vehicleImageName?: string;
-  personImages: Array<{ base64: string; fileName: string }>;
+  vehicleImageDataUrl?: string;
+  personImages: Array<{ dataUrl: string }>;
 }): Promise<{ success: boolean; id: string }> {
   const res = await fetch(`${getBase()}/.netlify/functions/submit`, {
     method: 'POST',
@@ -64,5 +65,49 @@ export function fileToBase64(file: File): Promise<string> {
     };
     reader.onerror = () => reject(reader.error);
     reader.readAsDataURL(file);
+  });
+}
+
+/** Compress image and return data URL - stores in DB, no bucket needed */
+export function compressImageToDataUrl(file: File, maxWidth = 800, quality = 0.8): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => {
+      const canvas = document.createElement('canvas');
+      let { width, height } = img;
+      if (width > maxWidth) {
+        height = (height * maxWidth) / width;
+        width = maxWidth;
+      }
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) {
+        fileToBase64(file).then((b) => resolve(`data:image/jpeg;base64,${b}`)).catch(reject);
+        return;
+      }
+      ctx.drawImage(img, 0, 0, width, height);
+      URL.revokeObjectURL(img.src);
+      canvas.toBlob(
+        (blob) => {
+          if (!blob) {
+            fileToBase64(file).then((b) => resolve(`data:image/jpeg;base64,${b}`)).catch(reject);
+            return;
+          }
+          const reader = new FileReader();
+          reader.onload = () => resolve(reader.result as string);
+          reader.onerror = () => reject(reader.error);
+          reader.readAsDataURL(blob);
+        },
+        'image/jpeg',
+        quality
+      );
+    };
+    img.onerror = () => {
+      URL.revokeObjectURL(img.src);
+      fileToBase64(file).then((b) => resolve(`data:image/jpeg;base64,${b}`)).catch(reject);
+    };
+    const objectUrl = URL.createObjectURL(file);
+    img.src = objectUrl;
   });
 }

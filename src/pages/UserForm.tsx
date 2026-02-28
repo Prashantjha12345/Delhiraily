@@ -2,7 +2,7 @@ import { useState, useRef } from 'react';
 import { Camera, UserPlus, Trash2, Check, MapPin } from 'lucide-react';
 import { assemblies } from '../data/assemblies';
 import { supabase } from '../lib/supabase';
-import { submitViaProxy, fileToBase64 } from '../lib/api';
+import { submitViaProxy, compressImageToDataUrl } from '../lib/api';
 
 interface Person {
   name: string;
@@ -141,24 +141,6 @@ export default function UserForm() {
     setPersonImagePreviews(personImagePreviews.filter((_, i) => i !== index));
   };
 
-  const uploadImage = async (file: File, submissionId: string, imageType: 'vehicle' | 'person') => {
-    const fileExt = file.name.split('.').pop();
-    const fileName = `${submissionId}_${imageType}_${Date.now()}.${fileExt}`;
-    const filePath = `${fileName}`;
-
-    const { error: uploadError } = await supabase.storage
-      .from('visitor-images')
-      .upload(filePath, file);
-
-    if (uploadError) throw uploadError;
-
-    const { data: { publicUrl } } = supabase.storage
-      .from('visitor-images')
-      .getPublicUrl(filePath);
-
-    return publicUrl;
-  };
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsSubmitting(true);
@@ -167,10 +149,20 @@ export default function UserForm() {
 
     try {
       let locationInfo: LocationInfo | null = null;
+      let coords: { lat: number; lng: number } | null = null;
       try {
-        const coords = await getCurrentPosition();
-        locationInfo = await reverseGeocode(coords.lat, coords.lng);
-        setLocation(locationInfo);
+        coords = await getCurrentPosition();
+        try {
+          locationInfo = await reverseGeocode(coords.lat, coords.lng);
+          setLocation(locationInfo);
+        } catch (geocodeErr) {
+          setLocationError('Address could not be fetched. Saving coordinates only.');
+          setLocation({
+            placeName: `Lat: ${coords.lat.toFixed(6)}, Lng: ${coords.lng.toFixed(6)}`,
+            city: '',
+            state: ''
+          });
+        }
       } catch (locErr) {
         const isPermissionDenied =
           typeof locErr === 'object' &&
@@ -182,17 +174,23 @@ export default function UserForm() {
           alert('Please allow location access in your browser settings and try again.');
           return;
         }
-        setLocationError('Address could not be fetched. Submitting without location.');
+        setLocationError('Location unavailable. Submitting without location.');
       }
+
+      const locationPlaceName = locationInfo?.placeName ?? (coords ? `Lat: ${coords.lat.toFixed(6)}, Lng: ${coords.lng.toFixed(6)}` : null);
+      const locationCity = locationInfo?.city ?? null;
+      const locationState = locationInfo?.state ?? null;
+      const latitude = coords?.lat ?? null;
+      const longitude = coords?.lng ?? null;
 
       const isProd = import.meta.env.PROD;
       let submitted = false;
 
       if (isProd) {
         try {
-          const vehicleImageBase64 = vehicleImage ? await fileToBase64(vehicleImage) : undefined;
-          const personImagesBase64 = await Promise.all(
-            personImages.map(async (f) => ({ base64: await fileToBase64(f), fileName: f.name }))
+          const vehicleImageDataUrl = vehicleImage ? await compressImageToDataUrl(vehicleImage) : undefined;
+          const personImagesData = await Promise.all(
+            personImages.map(async (f) => ({ dataUrl: await compressImageToDataUrl(f) }))
           );
           await submitViaProxy({
             name,
@@ -200,13 +198,14 @@ export default function UserForm() {
             assembly_name: assembly,
             total_people: parseInt(totalPeople),
             vehicle_number: vehicleNumber,
-            location_place_name: locationInfo?.placeName ?? null,
-            location_city: locationInfo?.city ?? null,
-            location_state: locationInfo?.state ?? null,
+            location_place_name: locationPlaceName,
+            location_city: locationCity,
+            location_state: locationState,
+            latitude,
+            longitude,
             people,
-            vehicleImageBase64,
-            vehicleImageName: vehicleImage?.name,
-            personImages: personImagesBase64
+            vehicleImageDataUrl,
+            personImages: personImagesData
           });
           submitted = true;
         } catch (proxyErr) {
@@ -223,9 +222,11 @@ export default function UserForm() {
             assembly_name: assembly,
             total_people: parseInt(totalPeople),
             vehicle_number: vehicleNumber,
-            location_place_name: locationInfo?.placeName ?? null,
-            location_city: locationInfo?.city ?? null,
-            location_state: locationInfo?.state ?? null
+            location_place_name: locationPlaceName,
+            location_city: locationCity,
+            location_state: locationState,
+            latitude,
+            longitude
           })
           .select()
           .single();
@@ -243,21 +244,21 @@ export default function UserForm() {
         }
 
         if (vehicleImage) {
-          const vehicleUrl = await uploadImage(vehicleImage, submission.id, 'vehicle');
+          const vehicleDataUrl = await compressImageToDataUrl(vehicleImage);
           await supabase.from('images').insert({
             submission_id: submission.id,
             image_type: 'vehicle',
-            image_url: vehicleUrl
+            image_url: vehicleDataUrl
           });
         }
 
         if (personImages.length > 0) {
           for (const img of personImages) {
-            const personUrl = await uploadImage(img, submission.id, 'person');
+            const personDataUrl = await compressImageToDataUrl(img);
             await supabase.from('images').insert({
               submission_id: submission.id,
               image_type: 'person',
-              image_url: personUrl
+              image_url: personDataUrl
             });
           }
         }

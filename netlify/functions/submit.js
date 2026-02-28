@@ -13,18 +13,6 @@ function getSupabase() {
   return createClient(url, key);
 }
 
-async function uploadFromBase64(supabase, base64, submissionId, imageType, fileName) {
-  const fileExt = fileName?.split('.').pop() || 'jpg';
-  const path = `${submissionId}_${imageType}_${Date.now()}.${fileExt}`;
-  const buf = Buffer.from(base64, 'base64');
-  const { error } = await supabase.storage
-    .from('visitor-images')
-    .upload(path, buf, { contentType: `image/${fileExt}` });
-  if (error) throw error;
-  const { data: { publicUrl } } = supabase.storage.from('visitor-images').getPublicUrl(path);
-  return publicUrl;
-}
-
 exports.handler = async (event) => {
   if (event.httpMethod === 'OPTIONS') {
     return { statusCode: 204, headers: corsHeaders, body: '' };
@@ -44,9 +32,10 @@ exports.handler = async (event) => {
       location_place_name,
       location_city,
       location_state,
+      latitude,
+      longitude,
       people = [],
-      vehicleImageBase64,
-      vehicleImageName,
+      vehicleImageDataUrl,
       personImages = [],
     } = body;
 
@@ -71,6 +60,8 @@ exports.handler = async (event) => {
         location_place_name: location_place_name || null,
         location_city: location_city || null,
         location_state: location_state || null,
+        latitude: latitude != null ? Number(latitude) : null,
+        longitude: longitude != null ? Number(longitude) : null,
       })
       .select()
       .single();
@@ -87,34 +78,20 @@ exports.handler = async (event) => {
       if (peopleError) throw peopleError;
     }
 
-    if (vehicleImageBase64) {
-      const vehicleUrl = await uploadFromBase64(
-        supabase,
-        vehicleImageBase64,
-        submission.id,
-        'vehicle',
-        vehicleImageName || 'vehicle.jpg'
-      );
+    if (vehicleImageDataUrl) {
       await supabase.from('images').insert({
         submission_id: submission.id,
         image_type: 'vehicle',
-        image_url: vehicleUrl,
+        image_url: vehicleImageDataUrl,
       });
     }
 
     for (const img of personImages) {
-      if (img.base64) {
-        const personUrl = await uploadFromBase64(
-          supabase,
-          img.base64,
-          submission.id,
-          'person',
-          img.fileName || 'person.jpg'
-        );
+      if (img.dataUrl) {
         await supabase.from('images').insert({
           submission_id: submission.id,
           image_type: 'person',
-          image_url: personUrl,
+          image_url: img.dataUrl,
         });
       }
     }
